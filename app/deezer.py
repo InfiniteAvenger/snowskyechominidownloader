@@ -81,6 +81,7 @@ def init_deezer_session(config) -> None:
         _set_song_quality(quality, wsq)
     except Exception as e:
         print(f"WARNING: Could not init Deezer session: {e}")
+        session = None
         return
 
     _init_lrc_session(config)
@@ -250,42 +251,57 @@ def _get_artist_albums(artist_id) -> list:
 
 def _format_results(data, search_type) -> list:
     results = []
+    if not data:
+        return results
     for item in data:
+        if not isinstance(item, dict):
+            continue
         r = {}
         if search_type == TYPE_ALBUM:
+            artist_dict = item.get("artist") or {}
+            artist_name = artist_dict.get("name", "Unknown Artist") if isinstance(artist_dict, dict) else "Unknown Artist"
             r = {
-                "id": str(item["id"]),
+                "id": str(item.get("id", "")),
                 "id_type": TYPE_ALBUM,
-                "album": item["title"],
-                "album_id": item["id"],
+                "album": item.get("title", "Unknown Album"),
+                "album_id": item.get("id", ""),
                 "img_url": item.get("cover_small", ""),
-                "artist": item["artist"]["name"],
+                "artist": artist_name,
                 "title": "",
                 "preview_url": "",
             }
         elif search_type == TYPE_TRACK:
+            album_dict = item.get("album") or {}
+            album_title = album_dict.get("title", "Unknown Album") if isinstance(album_dict, dict) else "Unknown Album"
+            album_cover = album_dict.get("cover_small", "") if isinstance(album_dict, dict) else ""
+            album_id = album_dict.get("id", "") if isinstance(album_dict, dict) else ""
+            
+            artist_dict = item.get("artist") or {}
+            artist_name = artist_dict.get("name", "Unknown Artist") if isinstance(artist_dict, dict) else "Unknown Artist"
+            
             r = {
-                "id": str(item["id"]),
+                "id": str(item.get("id", "")),
                 "id_type": TYPE_TRACK,
-                "title": item["title"],
-                "img_url": item["album"]["cover_small"],
-                "album": item["album"]["title"],
-                "album_id": item["album"]["id"],
-                "artist": item["artist"]["name"],
+                "title": item.get("title", "Unknown Title"),
+                "img_url": album_cover,
+                "album": album_title,
+                "album_id": album_id,
+                "artist": artist_name,
                 "preview_url": item.get("preview", ""),
             }
         elif search_type == TYPE_ALBUM_TRACK:
             pic_id = item.get("ALB_PICTURE")
             img_url = f"https://e-cdns-images.dzcdn.net/images/cover/{pic_id}/250x250.jpg" if pic_id else ""
+            
             r = {
-                "id": str(item["SNG_ID"]),
+                "id": str(item.get("SNG_ID", "")),
                 "id_type": TYPE_TRACK,
-                "title": item["SNG_TITLE"],
+                "title": item.get("SNG_TITLE", "Unknown Title"),
                 "img_url": img_url,
-                "album": item["ALB_TITLE"],
-                "album_id": item["ALB_ID"],
-                "artist": item["ART_NAME"],
-                "preview_url": next((m["HREF"] for m in item.get("MEDIA", []) if m["TYPE"] == "preview"), ""),
+                "album": item.get("ALB_TITLE", "Unknown Album"),
+                "album_id": item.get("ALB_ID", ""),
+                "artist": item.get("ART_NAME", "Unknown Artist"),
+                "preview_url": next((m.get("HREF", "") for m in item.get("MEDIA", []) if isinstance(m, dict) and m.get("TYPE") == "preview"), ""),
             }
         results.append(r)
     return results
