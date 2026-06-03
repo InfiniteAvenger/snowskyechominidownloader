@@ -1,0 +1,850 @@
+/* ═══════════════════════════════════════════
+   Snowsky Echo — Frontend
+   ═══════════════════════════════════════════ */
+
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+
+// ── Helpers ──
+
+function toast(msg) {
+  const el = $('#toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+async function api(path, body) {
+  const r = await fetch('/api' + path, {
+    method: body ? 'POST' : 'GET',
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  return r.json();
+}
+
+function esc(s) {
+  const el = document.createElement('span');
+  el.textContent = s || '';
+  return el.innerHTML;
+}
+
+// SVG icons (inline for speed)
+const ICONS = {
+  play:     '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21"/></svg>',
+  download: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
+  list:     '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>',
+  zip:      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>',
+  chevronDown: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition:transform .25s ease"><polyline points="6 9 12 15 18 9"/></svg>',
+  check:    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+  clock:    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+};
+
+// ── Theme ──
+
+function initTheme() {
+  const saved = localStorage.getItem('theme');
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  if (saved === 'dark' || (!saved && prefersDark)) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }
+  syncThemeIcon();
+}
+
+function toggleTheme() {
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  document.documentElement.setAttribute('data-theme', dark ? 'light' : 'dark');
+  localStorage.setItem('theme', dark ? 'light' : 'dark');
+  syncThemeIcon();
+}
+
+function syncThemeIcon() {
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  $('#icon-moon').style.display = dark ? 'none' : 'block';
+  $('#icon-sun').style.display = dark ? 'block' : 'none';
+}
+
+// ── Tabs ──
+
+function initTabs() {
+  $$('.tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      $$('.tab').forEach(t => t.classList.remove('active'));
+      $$('.tab-content').forEach(t => t.classList.remove('active'));
+      btn.classList.add('active');
+      $(`#tab-${btn.dataset.tab}`).classList.add('active');
+      if (btn.dataset.tab === 'queue') refreshQueue();
+    });
+  });
+}
+
+// ── Search ──
+
+let searchType = 'track';
+
+function initSearch() {
+  $$('.chip[data-search]').forEach(chip => {
+    chip.addEventListener('click', () => {
+      $$('.chip[data-search]').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      searchType = chip.dataset.search;
+      // Auto-search if there's a query
+      const q = $('#search-input').value.trim();
+      if (q) doSearch();
+    });
+  });
+}
+
+async function doSearch() {
+  const query = $('#search-input').value.trim();
+  if (!query) return;
+
+  const container = $('#results-container');
+  container.innerHTML = '<div class="empty-state"><p>Searching...</p></div>';
+
+  try {
+    const results = await api('/search', { type: searchType, query });
+    if (!results.length) {
+      container.innerHTML = '<div class="empty-state"><p>No results found</p></div>';
+      return;
+    }
+    container.innerHTML = '';
+    results.forEach(item => container.appendChild(buildResult(item)));
+  } catch {
+    container.innerHTML = '<div class="empty-state"><p>Search failed</p></div>';
+  }
+}
+
+function buildResult(item) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'result-wrapper';
+  if (item.downloaded) {
+    wrapper.classList.add('downloaded');
+  }
+
+  const div = document.createElement('div');
+  div.className = 'result-item';
+
+  const img = item.img_url
+    ? `<img class="result-img" src="${item.img_url}" alt="" loading="lazy">`
+    : '<div class="result-img-placeholder"></div>';
+
+  const title = item.title || item.album;
+  const badgeHtml = item.downloaded
+    ? `<span class="downloaded-badge" title="Already Downloaded">${ICONS.check}</span>`
+    : (item.in_queue ? `<span class="queued-badge" title="In Download Queue">${ICONS.clock}</span>` : '');
+
+  div.innerHTML = `
+    ${img}
+    <div class="result-info">
+      <div class="result-title">${esc(title)}</div>
+      <div class="result-meta"></div>
+    </div>
+    ${badgeHtml}
+    <div class="result-actions"></div>
+  `;
+  
+  const metaContainer = div.querySelector('.result-meta');
+  if (item.title) {
+    const artistSpan = document.createElement('span');
+    artistSpan.textContent = item.artist;
+    metaContainer.appendChild(artistSpan);
+    
+    metaContainer.appendChild(document.createTextNode(' · '));
+    
+    const albumLink = document.createElement('span');
+    albumLink.className = 'album-link';
+    albumLink.textContent = item.album;
+    albumLink.title = 'View Album';
+    albumLink.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showAlbumModal(item.album_id, item.album, item.artist, item.img_url);
+    });
+    metaContainer.appendChild(albumLink);
+  } else {
+    metaContainer.textContent = item.artist;
+  }
+  
+  const actionsContainer = div.querySelector('.result-actions');
+  
+  if (item.preview_url) {
+    const playBtn = document.createElement('button');
+    playBtn.className = 'action-btn';
+    playBtn.title = 'Preview';
+    playBtn.innerHTML = ICONS.play;
+    playBtn.addEventListener('click', () => playPreview(item.preview_url, title, item.artist));
+    actionsContainer.appendChild(playBtn);
+  }
+
+  if (item.id_type === 'album') {
+    const expandBtn = document.createElement('button');
+    expandBtn.className = 'action-btn toggle-album-btn';
+    expandBtn.title = 'Expand tracks';
+    expandBtn.innerHTML = ICONS.chevronDown;
+    expandBtn.addEventListener('click', () => toggleAlbum(item.album_id, expandBtn));
+    actionsContainer.appendChild(expandBtn);
+  }
+
+  const dlBtn = document.createElement('button');
+  dlBtn.className = 'action-btn download-btn';
+  dlBtn.title = 'Download';
+  dlBtn.innerHTML = ICONS.download;
+  dlBtn.addEventListener('click', () => dlItem(item.id, item.id_type, false, title, item.artist, item.img_url));
+  actionsContainer.appendChild(dlBtn);
+
+  if (item.id_type === 'album') {
+    const zipBtn = document.createElement('button');
+    zipBtn.className = 'action-btn';
+    zipBtn.title = 'Download ZIP';
+    zipBtn.innerHTML = ICONS.zip;
+    zipBtn.addEventListener('click', () => dlItem(item.id, item.id_type, true, title, item.artist, item.img_url));
+    actionsContainer.appendChild(zipBtn);
+  }
+
+  wrapper.appendChild(div);
+
+  if (item.id_type === 'album') {
+    const tracksDiv = document.createElement('div');
+    tracksDiv.className = 'album-tracks';
+    wrapper.appendChild(tracksDiv);
+  }
+
+  return wrapper;
+}
+
+async function toggleAlbum(albumId, btn) {
+  const wrapper = btn.closest('.result-wrapper');
+  const tracksDiv = wrapper.querySelector('.album-tracks');
+  const isExpanded = wrapper.classList.toggle('expanded');
+  
+  if (isExpanded) {
+    if (tracksDiv.children.length === 0) {
+      tracksDiv.innerHTML = '<div class="tracks-loading">Loading tracks...</div>';
+      try {
+        const tracks = await api('/search', { type: 'album_track', query: String(albumId) });
+        tracksDiv.innerHTML = '';
+        if (!tracks.length) {
+          tracksDiv.innerHTML = '<div class="tracks-empty">No tracks found</div>';
+        } else {
+          // Find parent cover art
+          const parentImg = wrapper.querySelector('.result-img');
+          const parentCoverUrl = parentImg ? parentImg.src : '';
+
+          tracks.forEach((track, i) => {
+            const trackIndex = (i + 1).toString().padStart(2, '0');
+            const trackRow = document.createElement('div');
+            trackRow.className = 'album-track-item';
+            
+            const badgeHtml = track.downloaded
+              ? `<span class="downloaded-badge" title="Already Downloaded">${ICONS.check}</span>`
+              : (track.in_queue ? `<span class="queued-badge" title="In Download Queue">${ICONS.clock}</span>` : '');
+
+            trackRow.innerHTML = `
+              <span class="track-index">${trackIndex}</span>
+              <div class="track-info">
+                <div class="track-title">${esc(track.title)}</div>
+              </div>
+              ${badgeHtml}
+              <div class="track-actions"></div>
+            `;
+            
+            const trackActions = trackRow.querySelector('.track-actions');
+            
+            if (track.preview_url) {
+              const playBtn = document.createElement('button');
+              playBtn.className = 'action-btn';
+              playBtn.title = 'Preview';
+              playBtn.innerHTML = ICONS.play;
+              playBtn.addEventListener('click', () => playPreview(track.preview_url, track.title, track.artist));
+              trackActions.appendChild(playBtn);
+            }
+            
+            const dlBtn = document.createElement('button');
+            dlBtn.className = 'action-btn download-btn';
+            dlBtn.title = 'Download';
+            dlBtn.innerHTML = ICONS.download;
+            dlBtn.addEventListener('click', () => dlItem(track.id, 'track', false, track.title, track.artist, track.img_url || parentCoverUrl));
+            trackActions.appendChild(dlBtn);
+            
+            tracksDiv.appendChild(trackRow);
+          });
+        }
+      } catch (e) {
+        tracksDiv.innerHTML = '<div class="tracks-error">Failed to load tracks</div>';
+      }
+    }
+  }
+}
+
+// ── Preview & Custom Player ──
+
+function formatTime(secs) {
+  if (isNaN(secs)) return '0:00';
+  const m = Math.floor(secs / 60);
+  const s = Math.floor(secs % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function playPreview(url, title, artist = 'Deezer Preview') {
+  const bar = $('#preview-bar');
+  const audio = $('#audio-preview');
+  
+  $('#preview-title').textContent = title || 'Preview';
+  $('#preview-artist').textContent = artist || '';
+  
+  audio.src = url;
+  bar.style.display = 'flex';
+  audio.play();
+}
+
+function closePreview() {
+  const audio = $('#audio-preview');
+  audio.pause();
+  audio.src = '';
+  $('#preview-bar').style.display = 'none';
+}
+
+function togglePlayPreview() {
+  const audio = $('#audio-preview');
+  if (audio.paused) {
+    audio.play();
+  } else {
+    audio.pause();
+  }
+}
+
+function toggleMutePreview() {
+  const audio = $('#audio-preview');
+  audio.muted = !audio.muted;
+  $('#preview-volume-icon').style.display = audio.muted ? 'none' : 'block';
+  $('#preview-mute-icon').style.display = audio.muted ? 'block' : 'none';
+}
+
+function seekPreview(e) {
+  const audio = $('#audio-preview');
+  const slider = $('#preview-slider');
+  const rect = slider.getBoundingClientRect();
+  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  if (audio.duration) {
+    audio.currentTime = pct * audio.duration;
+  }
+}
+
+// ── Album Modal ──
+
+async function showAlbumModal(albumId, albumTitle, artistName, fallbackImgUrl) {
+  const modal = $('#album-modal');
+  const modalTitle = $('#album-modal-title');
+  const modalName = $('#album-modal-name');
+  const modalArtist = $('#album-modal-artist');
+  const modalImg = $('#album-modal-img');
+  const modalTracks = $('#album-modal-tracks');
+  
+  modalTitle.textContent = 'Album Details';
+  modalName.textContent = albumTitle;
+  modalArtist.textContent = artistName;
+  modalImg.src = fallbackImgUrl || '';
+  modalTracks.innerHTML = '<div class="tracks-loading">Loading tracks...</div>';
+  
+  // Setup download buttons on the modal
+  const dlBtn = $('#btn-album-modal-dl');
+  const zipBtn = $('#btn-album-modal-zip');
+  
+  // Remove old listeners by cloning
+  const newDlBtn = dlBtn.cloneNode(true);
+  const newZipBtn = zipBtn.cloneNode(true);
+  dlBtn.parentNode.replaceChild(newDlBtn, dlBtn);
+  zipBtn.parentNode.replaceChild(newZipBtn, zipBtn);
+  
+  newDlBtn.addEventListener('click', () => {
+    dlItem(String(albumId), 'album', false, albumTitle, artistName, fallbackImgUrl);
+  });
+  newZipBtn.addEventListener('click', () => {
+    dlItem(String(albumId), 'album', true, albumTitle, artistName, fallbackImgUrl);
+  });
+  
+  modal.classList.add('show');
+  
+  try {
+    const tracks = await api('/search', { type: 'album_track', query: String(albumId) });
+    modalTracks.innerHTML = '';
+    if (!tracks.length) {
+      modalTracks.innerHTML = '<div class="tracks-empty">No tracks found</div>';
+    } else {
+      if (tracks[0].img_url) {
+        modalImg.src = tracks[0].img_url;
+      }
+      
+      tracks.forEach((track, i) => {
+        const trackIndex = (i + 1).toString().padStart(2, '0');
+        const trackRow = document.createElement('div');
+        trackRow.className = 'album-track-item';
+        
+        const badgeHtml = track.downloaded
+          ? `<span class="downloaded-badge" title="Already Downloaded">${ICONS.check}</span>`
+          : (track.in_queue ? `<span class="queued-badge" title="In Download Queue">${ICONS.clock}</span>` : '');
+
+        trackRow.innerHTML = `
+          <span class="track-index">${trackIndex}</span>
+          <div class="track-info">
+            <div class="track-title">${esc(track.title)}</div>
+          </div>
+          ${badgeHtml}
+          <div class="track-actions"></div>
+        `;
+        
+        const trackActions = trackRow.querySelector('.track-actions');
+        if (track.preview_url) {
+          const playBtn = document.createElement('button');
+          playBtn.className = 'action-btn';
+          playBtn.title = 'Preview';
+          playBtn.innerHTML = ICONS.play;
+          playBtn.addEventListener('click', () => playPreview(track.preview_url, track.title, track.artist));
+          trackActions.appendChild(playBtn);
+        }
+        
+        const dlTrackBtn = document.createElement('button');
+        dlTrackBtn.className = 'action-btn download-btn';
+        dlTrackBtn.title = 'Download';
+        dlTrackBtn.innerHTML = ICONS.download;
+        dlTrackBtn.addEventListener('click', () => dlItem(track.id, 'track', false, track.title, track.artist, track.img_url || modalImg.src));
+        trackActions.appendChild(dlTrackBtn);
+        
+        modalTracks.appendChild(trackRow);
+      });
+    }
+  } catch (e) {
+    modalTracks.innerHTML = '<div class="tracks-error">Failed to load tracks</div>';
+  }
+}
+
+function closeAlbumModal() {
+  $('#album-modal').classList.remove('show');
+}
+
+// ── Settings State ──
+let appSettings = {
+  output_dir: '',
+  layout_mode: 'compact',
+  auto_redirect_queue: false,
+  item_size: 'standard'
+};
+
+function applyLayoutMode(mode) {
+  if (mode === 'full') {
+    document.body.setAttribute('data-layout', 'full');
+  } else {
+    document.body.removeAttribute('data-layout');
+  }
+}
+
+function applyDensitySettings(size) {
+  const container = $('#results-container');
+  if (container) {
+    container.setAttribute('data-density', size || 'standard');
+  }
+}
+
+async function refreshQueueBadge() {
+  try {
+    const tasks = await api('/queue');
+    const active = tasks.filter(t => t.state === 'active' || t.state === 'queued').length;
+    const badge = $('#queue-badge');
+    if (active > 0) {
+      badge.textContent = active;
+      badge.style.display = 'inline';
+    } else {
+      badge.style.display = 'none';
+    }
+  } catch (e) {}
+}
+
+// ── Download ──
+
+async function dlItem(id, type, zip, title, artist, imgUrl) {
+  const label = type === 'album' ? (zip ? 'Downloading album as ZIP...' : 'Downloading album...') : 'Downloading track...';
+  toast(label);
+  await api('/download', {
+    type,
+    music_id: id,
+    create_zip: zip,
+    title: title,
+    artist: artist,
+    img_url: imgUrl
+  });
+  refreshQueueBadge();
+  if (appSettings.auto_redirect_queue) {
+    showTab('queue');
+  }
+}
+
+async function downloadYouTube() {
+  const url = $('#yt-input').value.trim();
+  if (!url) return;
+  toast('Downloading via yt-dlp...');
+  await api('/youtube', { url });
+  refreshQueueBadge();
+  if (appSettings.auto_redirect_queue) {
+    showTab('queue');
+  } else {
+    $('#yt-input').value = '';
+  }
+}
+
+function showTab(name) {
+  $$('.tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.tab === name);
+  });
+  $$('.tab-content').forEach(t => {
+    t.classList.toggle('active', t.id === `tab-${name}`);
+  });
+  if (name === 'queue') refreshQueue();
+}
+
+// ── Playlists ──
+
+async function dlDeezerPl(zip) {
+  const url = $('#deezer-playlist-url').value.trim();
+  if (!url) return;
+  toast('Downloading Deezer playlist...');
+  await api('/playlist/deezer', { playlist_url: url, create_zip: zip });
+  refreshQueueBadge();
+  if (appSettings.auto_redirect_queue) {
+    showTab('queue');
+  } else {
+    $('#deezer-playlist-url').value = '';
+  }
+}
+
+async function dlSpotifyPl(zip) {
+  const name = $('#spotify-playlist-name').value.trim();
+  const url = $('#spotify-playlist-url').value.trim();
+  if (!url) return;
+  toast('Downloading Spotify playlist...');
+  await api('/playlist/spotify', { playlist_name: name || 'spotify', playlist_url: url, create_zip: zip });
+  refreshQueueBadge();
+  if (appSettings.auto_redirect_queue) {
+    showTab('queue');
+  } else {
+    $('#spotify-playlist-name').value = '';
+    $('#spotify-playlist-url').value = '';
+  }
+}
+
+async function dlDeezerFav() {
+  const uid = $('#deezer-fav-uid').value.trim();
+  if (!uid) return;
+  toast('Downloading favorites...');
+  await api('/favorites', { user_id: uid });
+  refreshQueueBadge();
+  if (appSettings.auto_redirect_queue) {
+    showTab('queue');
+  } else {
+    $('#deezer-fav-uid').value = '';
+  }
+}
+
+// ── Queue ──
+
+let _queueTimer = null;
+
+async function refreshQueue() {
+  try {
+    const tasks = await api('/queue');
+    const container = $('#queue-container');
+    const badge = $('#queue-badge');
+
+    // Update badge
+    const active = tasks.filter(t => t.state === 'active' || t.state === 'queued').length;
+    if (active > 0) {
+      badge.textContent = active;
+      badge.style.display = 'inline';
+    } else {
+      badge.style.display = 'none';
+    }
+
+    const hasCompleted = tasks.some(t => t.state === 'done' || t.state === 'failed');
+    $('#queue-actions-bar').style.display = hasCompleted ? 'flex' : 'none';
+
+    if (!tasks.length) {
+      container.innerHTML = '<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.3"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg><p>No downloads yet</p></div>';
+      return;
+    }
+
+    container.innerHTML = '';
+    tasks.forEach(t => {
+      const div = document.createElement('div');
+      div.className = 'queue-item';
+
+      let img = '';
+      if (t.img_url) {
+        img = `<img class="queue-img" src="${t.img_url}" alt="" loading="lazy">`;
+      } else {
+        let iconSvg = '';
+        if (t.description.toLowerCase().includes('youtube')) {
+          iconSvg = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>';
+        } else {
+          iconSvg = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
+        }
+        img = `<div class="queue-img-placeholder">${iconSvg}</div>`;
+      }
+
+      let progress = '';
+      if (t.state === 'active') {
+        let activeText = t.current_item ? `<div class="queue-active-text">${esc(t.current_item)}</div>` : '';
+        let progressRow = '';
+        if (t.progress_max > 0) {
+          const pct = Math.round((t.progress / t.progress_max) * 100);
+          progressRow = `
+            <div class="queue-progress-row">
+              <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+              <span class="queue-progress-pct">${pct}%</span>
+            </div>
+          `;
+        } else {
+          progressRow = `
+            <div class="queue-progress-row">
+              <div class="progress-bar indeterminate"><div class="progress-fill"></div></div>
+            </div>
+          `;
+        }
+        progress = `${progressRow}${activeText}`;
+      } else if (t.state === 'queued') {
+        progress = `<div class="queue-active-text">Waiting in queue...</div>`;
+      }
+
+      let error = t.state === 'failed' && t.error
+        ? `<div class="queue-error">${esc(t.error)}</div>` : '';
+
+      let retryBtn = '';
+      if (t.state === 'failed') {
+        retryBtn = `<button class="btn retry-btn">Retry</button>`;
+      }
+
+      let cleanDesc = t.description;
+      let cleanMeta = t.artist ? t.artist : 'Active task';
+      
+      if (t.title) {
+        cleanDesc = t.title;
+        let type = 'Task';
+        const dLower = t.description.toLowerCase();
+        if (dLower.includes('album')) {
+          type = 'Album';
+        } else if (dLower.includes('track')) {
+          type = 'Track';
+        } else if (dLower.includes('playlist')) {
+          type = 'Playlist';
+        } else if (dLower.includes('favorites')) {
+          type = 'Favorites';
+        } else if (dLower.includes('youtube')) {
+          type = 'YouTube Audio';
+        }
+        
+        if (t.artist) {
+          if (type === 'Playlist' || type === 'Favorites') {
+            cleanMeta = `${type} · ${t.artist}`;
+          } else {
+            cleanMeta = `${type} by ${t.artist}`;
+          }
+        } else {
+          cleanMeta = type;
+        }
+      }
+
+      div.innerHTML = `
+        ${img}
+        <div class="queue-info">
+          <div class="queue-desc">${esc(cleanDesc)}</div>
+          <div class="queue-meta">${esc(cleanMeta)}</div>
+          ${progress}${error}${retryBtn}
+        </div>
+        <span class="pill pill-${t.state}">${t.state}</span>
+      `;
+
+      if (t.state === 'failed') {
+        const rBtn = div.querySelector('.retry-btn');
+        if (rBtn) {
+          rBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            rBtn.disabled = true;
+            rBtn.textContent = 'Retrying...';
+            await api('/queue/retry', { task_id: t.id });
+            refreshQueue();
+          });
+        }
+      }
+
+      container.appendChild(div);
+    });
+
+    // Keep polling if active
+    if (active > 0) {
+      clearTimeout(_queueTimer);
+      _queueTimer = setTimeout(refreshQueue, 1500);
+    }
+  } catch (e) {
+    console.error('Queue refresh error', e);
+  }
+}
+
+// ── Settings ──
+
+async function openSettings() {
+  const data = await api('/settings');
+  appSettings = data;
+  $('#settings-output-dir').value = data.output_dir || '';
+  $('#settings-layout-mode').value = data.layout_mode || 'compact';
+  $('#settings-item-size').value = data.item_size || 'standard';
+  $('#settings-auto-redirect').checked = data.auto_redirect_queue || false;
+  $('#settings-download-lrc').checked = data.download_lrc !== false;
+  $('#settings-storage-free').textContent = data.free_space || 'Unknown';
+  $('#settings-modal').classList.add('show');
+}
+
+function closeSettings() { $('#settings-modal').classList.remove('show'); }
+
+async function saveSettings() {
+  const dir = $('#settings-output-dir').value.trim();
+  if (!dir) return;
+  const layout = $('#settings-layout-mode').value;
+  const itemSize = $('#settings-item-size').value;
+  const autoRedirect = $('#settings-auto-redirect').checked;
+  const downloadLrc = $('#settings-download-lrc').checked;
+
+  await api('/settings', {
+    output_dir: dir,
+    layout_mode: layout,
+    auto_redirect_queue: autoRedirect,
+    item_size: itemSize,
+    download_lrc: downloadLrc
+  });
+
+  appSettings = {
+    output_dir: dir,
+    layout_mode: layout,
+    auto_redirect_queue: autoRedirect,
+    item_size: itemSize,
+    download_lrc: downloadLrc
+  };
+
+  applyLayoutMode(layout);
+  applyDensitySettings(itemSize);
+  toast('Settings saved');
+  closeSettings();
+}
+
+// ── Keyboard ──
+
+function initKeys() {
+  document.addEventListener('keydown', e => {
+    if (e.target.id === 'search-input' && e.key === 'Enter') {
+      e.preventDefault();
+      doSearch();
+    }
+    if (e.target.id === 'yt-input' && e.key === 'Enter') {
+      e.preventDefault();
+      downloadYouTube();
+    }
+    if (e.key === 'k' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      $('#search-input').focus();
+      $('#search-input').select();
+      showTab('search');
+    }
+    if (e.key === 'Escape') {
+      closeSettings();
+      closeAlbumModal();
+    }
+  });
+}
+
+// ── Boot ──
+
+async function loadSettingsOnBoot() {
+  try {
+    const data = await api('/settings');
+    appSettings = data;
+    applyLayoutMode(appSettings.layout_mode);
+    applyDensitySettings(appSettings.item_size);
+    refreshQueueBadge();
+  } catch (e) {
+    console.error("Failed to load settings on boot", e);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  initTheme();
+  initTabs();
+  initSearch();
+  initKeys();
+  loadSettingsOnBoot();
+
+  $('#btn-theme').onclick = toggleTheme;
+  $('#btn-settings').onclick = openSettings;
+  $('#btn-close-settings').onclick = closeSettings;
+  $('#btn-save-settings').onclick = saveSettings;
+  $('#btn-close-preview').onclick = closePreview;
+  $('#btn-preview-play').onclick = togglePlayPreview;
+  $('#btn-preview-mute').onclick = toggleMutePreview;
+  $('#preview-slider').onclick = seekPreview;
+  $('#btn-close-album-modal').onclick = closeAlbumModal;
+  $('#btn-yt-download').onclick = downloadYouTube;
+  $('#btn-deezer-pl').onclick = () => dlDeezerPl(false);
+  $('#btn-deezer-pl-zip').onclick = () => dlDeezerPl(true);
+  $('#btn-spotify-pl').onclick = () => dlSpotifyPl(false);
+  $('#btn-spotify-pl-zip').onclick = () => dlSpotifyPl(true);
+  $('#btn-deezer-fav').onclick = dlDeezerFav;
+  $('#btn-clear-queue').onclick = async () => {
+    await api('/queue/clear', {});
+    refreshQueue();
+  };
+
+  // Custom audio player sync events
+  const audio = $('#audio-preview');
+  
+  audio.addEventListener('play', () => {
+    $('#preview-play-icon').style.display = 'none';
+    $('#preview-pause-icon').style.display = 'block';
+  });
+  
+  audio.addEventListener('pause', () => {
+    $('#preview-play-icon').style.display = 'block';
+    $('#preview-pause-icon').style.display = 'none';
+  });
+  
+  audio.addEventListener('timeupdate', () => {
+    const cur = audio.currentTime;
+    const dur = audio.duration || 0;
+    $('#preview-time-current').textContent = formatTime(cur);
+    if (dur > 0) {
+      const pct = (cur / dur) * 100;
+      $('#preview-slider-fill').style.width = pct + '%';
+    }
+  });
+  
+  audio.addEventListener('loadedmetadata', () => {
+    $('#preview-time-total').textContent = formatTime(audio.duration);
+  });
+  
+  audio.addEventListener('ended', () => {
+    $('#preview-play-icon').style.display = 'block';
+    $('#preview-pause-icon').style.display = 'none';
+    $('#preview-slider-fill').style.width = '0%';
+    $('#preview-time-current').textContent = '0:00';
+  });
+
+  // Background queue poll for badge
+  setInterval(() => {
+    api('/queue').then(tasks => {
+      const active = tasks.filter(t => t.state === 'active' || t.state === 'queued').length;
+      const badge = $('#queue-badge');
+      if (active > 0) {
+        badge.textContent = active;
+        badge.style.display = 'inline';
+      } else {
+        badge.style.display = 'none';
+      }
+    }).catch(() => {});
+  }, 5000);
+});
