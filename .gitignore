@@ -1,0 +1,13 @@
+# Local configuration files
+config.ini
+settings.json
+
+# Python environment and caches
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+
+# Project logs
+*.log
