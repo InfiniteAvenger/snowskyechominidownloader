@@ -1,7 +1,24 @@
 """yt-dlp integration for downloading audio from YouTube and other sites."""
+import os
 import re
-from shlex import quote
+import shutil
 from subprocess import Popen, PIPE
+
+
+def resolve_ytdlp_cmd(ytdlp_cmd: str) -> str:
+    """Resolve the yt-dlp command path, falling back to the virtual environment if needed."""
+    if ytdlp_cmd != "yt-dlp":
+        return ytdlp_cmd
+    if shutil.which("yt-dlp"):
+        return "yt-dlp"
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    win_path = os.path.join(base_dir, "venv", "Scripts", "yt-dlp.exe")
+    if os.path.exists(win_path):
+        return win_path
+    unix_path = os.path.join(base_dir, "venv", "bin", "yt-dlp")
+    if os.path.exists(unix_path):
+        return unix_path
+    return "yt-dlp"
 
 
 def youtubedl_download(url: str, destination_dir: str, ytdlp_cmd: str = "yt-dlp", proxy: str = None) -> str:
@@ -11,21 +28,26 @@ def youtubedl_download(url: str, destination_dir: str, ytdlp_cmd: str = "yt-dlp"
     Returns the absolute path of the downloaded MP3 file.
     Raises YoutubeDLError on failure.
     """
-    proxy_flag = f' --proxy {proxy}' if proxy else ""
-    cmd = (
-        f'{ytdlp_cmd}{proxy_flag}'
-        f' -x --audio-format mp3 --audio-quality 0'
-        f' --embed-metadata --no-embed-chapters'
-        f" -o \"{destination_dir}/%(title)s.%(ext)s\""
-        f' {quote(url)}'
-    )
+    resolved_cmd = resolve_ytdlp_cmd(ytdlp_cmd)
+    cmd = [resolved_cmd]
+    if proxy:
+        cmd.extend(["--proxy", proxy])
+    cmd.extend([
+        "-x",
+        "--audio-format", "mp3",
+        "--audio-quality", "0",
+        "--embed-metadata",
+        "--no-embed-chapters",
+        "-o", f"{destination_dir}/%(title)s.%(ext)s",
+        url
+    ])
 
-    print(f"Executing: {cmd}")
-    p = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
+    print(f"Executing: {' '.join(cmd)}")
+    p = Popen(cmd, stdout=PIPE, stderr=PIPE)
     p.wait()
     stdout, stderr = p.communicate()
-    stdout_str = stdout.decode()
-    stderr_str = stderr.decode()
+    stdout_str = stdout.decode("utf-8", errors="ignore")
+    stderr_str = stderr.decode("utf-8", errors="ignore")
 
     if p.returncode != 0:
         raise YoutubeDLError(f"yt-dlp failed:\n{stderr_str}")

@@ -14,7 +14,7 @@ if %errorlevel% neq 0 (
 )
 
 :: Execute the server script
-python run.py
+venv\Scripts\python run.py
 
 :: If the server crashed or exited with an error, keep the window open
 if %errorlevel% neq 0 (

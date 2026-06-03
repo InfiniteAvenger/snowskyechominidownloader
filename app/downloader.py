@@ -291,17 +291,23 @@ def download_favorites(user_id: str, config, queue=None):
 
 def download_youtube(url: str, config, queue=None):
     """Download audio from a URL via yt-dlp."""
-    ytdlp_cmd = config.get("youtubedl", "command", fallback="yt-dlp")
+    from app.youtubedl import resolve_ytdlp_cmd
+    ytdlp_cmd = resolve_ytdlp_cmd(config.get("youtubedl", "command", fallback="yt-dlp"))
     proxy = config.get("proxy", "server", fallback="").strip() or None
-    proxy_flag = f' --proxy {proxy}' if proxy else ""
 
     if queue:
         queue.update_metadata(title="YouTube Video", artist="Fetching metadata...", description="Downloading YouTube Audio")
         try:
             import subprocess
-            from shlex import quote
-            meta_cmd = f'{ytdlp_cmd}{proxy_flag} --simulate --print "%(title)s\\n%(thumbnail)s\\n%(uploader)s" {quote(url)}'
-            p = subprocess.Popen(meta_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            cmd = [ytdlp_cmd]
+            if proxy:
+                cmd.extend(["--proxy", proxy])
+            cmd.extend([
+                "--simulate",
+                "--print", "%(title)s\n%(thumbnail)s\n%(uploader)s",
+                url
+            ])
+            p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             stdout, _ = p.communicate()
             if p.returncode == 0:
                 lines = [line.strip() for line in stdout.decode("utf-8", errors="ignore").split("\n") if line.strip()]
