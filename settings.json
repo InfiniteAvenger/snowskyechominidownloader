@@ -4,8 +4,8 @@
   "auto_redirect_queue": false,
   "item_size": "large",
   "download_lrc": true,
-  "soulseek_enabled": false,
-  "soulseek_username": "",
-  "soulseek_password": "",
+  "soulseek_enabled": true,
+  "soulseek_username": "HunterEvans",
+  "soulseek_password": "Gwendelin2021!",
   "sldl_command": "sldl"
 }

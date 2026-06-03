@@ -166,7 +166,7 @@ main {
 }
 .search-icon { color: var(--text-3); flex-shrink: 0; }
 
-input[type="text"] {
+input[type="text"], input[type="password"] {
   width: 100%;
   background: transparent;
   border: none;
@@ -176,7 +176,7 @@ input[type="text"] {
   outline: none;
   padding: 0.35rem 0;
 }
-input[type="text"]::placeholder { color: var(--text-3); }
+input[type="text"]::placeholder, input[type="password"]::placeholder { color: var(--text-3); }
 
 .search-type-row {
   display: flex;
@@ -739,6 +739,8 @@ input[type="text"]::placeholder { color: var(--text-3); }
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 0.55rem 0.7rem;
+  color: var(--text);
+  font: inherit;
 }
 .modal-body input:focus { border-color: var(--accent); }
 
