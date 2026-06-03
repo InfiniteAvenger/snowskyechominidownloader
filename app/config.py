@@ -52,6 +52,9 @@ def load_config(config_path: str) -> ConfigParser:
     # Create download directories
     for key in ["songs", "albums", "playlists", "youtubedl", "zips"]:
         if key in config["download_dirs"]:
-            os.makedirs(config["download_dirs"][key], exist_ok=True)
+            try:
+                os.makedirs(config["download_dirs"][key], exist_ok=True)
+            except Exception as e:
+                print(f"WARNING: Could not create directory {config['download_dirs'][key]}: {e}")
 
     return config

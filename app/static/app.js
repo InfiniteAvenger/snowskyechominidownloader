@@ -119,6 +119,11 @@ async function doSearch() {
 function buildResult(item) {
   const wrapper = document.createElement('div');
   wrapper.className = 'result-wrapper';
+  wrapper.dataset.id = item.id;
+  wrapper.dataset.type = item.id_type;
+  if (item.album_id) {
+    wrapper.dataset.albumId = item.album_id;
+  }
   if (item.downloaded) {
     wrapper.classList.add('downloaded');
   }
@@ -235,6 +240,9 @@ async function toggleAlbum(albumId, btn) {
             const trackIndex = (i + 1).toString().padStart(2, '0');
             const trackRow = document.createElement('div');
             trackRow.className = 'album-track-item';
+            trackRow.dataset.id = track.id;
+            trackRow.dataset.type = 'track';
+            trackRow.dataset.albumId = albumId;
             
             const badgeHtml = track.downloaded
               ? `<span class="downloaded-badge" title="Already Downloaded">${ICONS.check}</span>`
@@ -380,6 +388,9 @@ async function showAlbumModal(albumId, albumTitle, artistName, fallbackImgUrl) {
         const trackIndex = (i + 1).toString().padStart(2, '0');
         const trackRow = document.createElement('div');
         trackRow.className = 'album-track-item';
+        trackRow.dataset.id = track.id;
+        trackRow.dataset.type = 'track';
+        trackRow.dataset.albumId = albumId;
         
         const badgeHtml = track.downloaded
           ? `<span class="downloaded-badge" title="Already Downloaded">${ICONS.check}</span>`
@@ -460,11 +471,131 @@ async function refreshQueueBadge() {
   } catch (e) {}
 }
 
+// ── Realtime Status Sync ──
+
+const localQueued = new Set();
+const localQueuedAlbums = new Set();
+
+function updateRealtimeStatuses(tasks = []) {
+  const queuedIds = new Set(localQueued);
+  const downloadedIds = new Set();
+  const queuedAlbumIds = new Set(localQueuedAlbums);
+  const downloadedAlbumIds = new Set();
+
+  tasks.forEach(t => {
+    if (t.music_id && t.music_type) {
+      const key = `${t.music_id}:${t.music_type}`;
+      if (t.state === 'queued' || t.state === 'active') {
+        queuedIds.add(key);
+        if (t.music_type === 'album') {
+          queuedAlbumIds.add(t.music_id);
+        }
+        localQueued.delete(key);
+        if (t.music_type === 'album') {
+          localQueuedAlbums.delete(t.music_id);
+        }
+      } else if (t.state === 'done') {
+        downloadedIds.add(key);
+        if (t.music_type === 'album') {
+          downloadedAlbumIds.add(t.music_id);
+        }
+        localQueued.delete(key);
+        if (t.music_type === 'album') {
+          localQueuedAlbums.delete(t.music_id);
+        }
+      }
+    }
+  });
+
+  // Update search results
+  document.querySelectorAll('.result-wrapper').forEach(wrapper => {
+    const id = wrapper.dataset.id;
+    const type = wrapper.dataset.type;
+    if (!id || !type) return;
+
+    const key = `${id}:${type}`;
+    const resultItem = wrapper.querySelector('.result-item');
+    if (!resultItem) return;
+
+    let isDownloaded = wrapper.classList.contains('downloaded') || 
+                       resultItem.querySelector('.downloaded-badge') !== null ||
+                       downloadedIds.has(key);
+    
+    let isQueued = !isDownloaded && (
+      queuedIds.has(key) || 
+      (type === 'track' && wrapper.dataset.albumId && queuedAlbumIds.has(wrapper.dataset.albumId))
+    );
+
+    if (type === 'album' && downloadedAlbumIds.has(id)) {
+      isDownloaded = true;
+    }
+
+    updateBadge(resultItem, '.result-actions', isDownloaded, isQueued);
+    if (isDownloaded) {
+      wrapper.classList.add('downloaded');
+    }
+  });
+
+  // Update track rows (expanded results & modal)
+  document.querySelectorAll('.album-track-item').forEach(trackRow => {
+    const id = trackRow.dataset.id;
+    const type = 'track';
+    if (!id) return;
+
+    const key = `${id}:${type}`;
+    const albumId = trackRow.dataset.albumId;
+
+    let isDownloaded = trackRow.querySelector('.downloaded-badge') !== null ||
+                       downloadedIds.has(key) ||
+                       (albumId && downloadedAlbumIds.has(albumId));
+
+    let isQueued = !isDownloaded && (
+      queuedIds.has(key) || 
+      (albumId && queuedAlbumIds.has(albumId))
+    );
+
+    updateBadge(trackRow, '.track-actions', isDownloaded, isQueued);
+  });
+}
+
+function updateBadge(container, actionsSelector, isDownloaded, isQueued) {
+  const existingDownloaded = container.querySelector('.downloaded-badge');
+  const existingQueued = container.querySelector('.queued-badge');
+  
+  if (existingDownloaded) existingDownloaded.remove();
+  if (existingQueued) existingQueued.remove();
+
+  const actions = container.querySelector(actionsSelector);
+  if (!actions) return;
+
+  if (isDownloaded) {
+    const badge = document.createElement('span');
+    badge.className = 'downloaded-badge';
+    badge.title = 'Already Downloaded';
+    badge.innerHTML = ICONS.check;
+    actions.before(badge);
+  } else if (isQueued) {
+    const badge = document.createElement('span');
+    badge.className = 'queued-badge';
+    badge.title = 'In Download Queue';
+    badge.innerHTML = ICONS.clock;
+    actions.before(badge);
+  }
+}
+
 // ── Download ──
 
 async function dlItem(id, type, zip, title, artist, imgUrl) {
   const label = type === 'album' ? (zip ? 'Downloading album as ZIP...' : 'Downloading album...') : 'Downloading track...';
   toast(label);
+
+  const key = `${id}:${type}`;
+  localQueued.add(key);
+  if (type === 'album') {
+    localQueuedAlbums.add(id);
+  }
+  updateRealtimeStatuses();
+
   await api('/download', {
     type,
     music_id: id,
@@ -552,6 +683,7 @@ let _queueTimer = null;
 async function refreshQueue() {
   try {
     const tasks = await api('/queue');
+    updateRealtimeStatuses(tasks);
     const container = $('#queue-container');
     const badge = $('#queue-badge');
 
@@ -845,6 +977,7 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         badge.style.display = 'none';
       }
+      updateRealtimeStatuses(tasks);
     }).catch(() => {});
   }, 5000);
 });
