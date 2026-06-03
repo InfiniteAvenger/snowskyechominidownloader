@@ -8,13 +8,111 @@ from app.deezer import (
     TYPE_TRACK, TYPE_ALBUM, TYPE_PLAYLIST,
     get_song_infos_from_deezer_website, download_song, get_file_extension,
     parse_deezer_playlist, get_deezer_favorites, get_album_data,
-    deezer_search,
+    deezer_search, tag_mp3_file, _add_vorbis_tags, _download_lrc,
 )
 from app.youtubedl import youtubedl_download
 
 
 # Cache album artist lookups
 _album_artist_cache = {}
+
+
+def download_song_with_fallback(song: dict, output_file: str, config) -> None:
+    try:
+        download_song(song, output_file)
+    except Exception as primary_err:
+        print(f"WARNING: Primary download failed for '{song.get('SNG_TITLE', 'Unknown')}' ({primary_err}). Trying fallback sources...")
+        
+        ext = os.path.splitext(output_file)[1].lower().strip(".")
+        if ext not in ("mp3", "flac"):
+            ext = "mp3"
+            
+        artist = song.get("ART_NAME", "Unknown Artist")
+        title = song.get("SNG_TITLE", "Unknown Title")
+        query = f"{artist} - {title}"
+        
+        # Check if Soulseek is enabled in settings.json
+        import json
+        soulseek_enabled = False
+        sldl_cmd = "sldl"
+        slsk_user = ""
+        slsk_pass = ""
+        
+        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        settings_path = os.path.join(root_dir, "settings.json")
+        if os.path.exists(settings_path):
+            try:
+                with open(settings_path, "r", encoding="utf-8") as f:
+                    settings_data = json.load(f)
+                    soulseek_enabled = settings_data.get("soulseek_enabled", False)
+                    sldl_cmd = settings_data.get("sldl_command", "sldl")
+                    slsk_user = settings_data.get("soulseek_username", "")
+                    slsk_pass = settings_data.get("soulseek_password", "")
+            except Exception:
+                pass
+                
+        download_success = False
+        
+        # 1. Try Soulseek fallback if enabled
+        if soulseek_enabled and slsk_user and slsk_pass:
+            temp_dir = os.path.join(config["download_dirs"]["base"], f"temp_slsk_{song.get('SNG_ID', 'default')}")
+            os.makedirs(temp_dir, exist_ok=True)
+            
+            from app.youtubedl import download_from_soulseek_search
+            slsk_success = download_from_soulseek_search(query, temp_dir, ext, slsk_user, slsk_pass, sldl_cmd)
+            
+            if slsk_success:
+                # Scan temp_dir for the downloaded file
+                downloaded_file_path = None
+                for root, dirs, files in os.walk(temp_dir):
+                    for file in files:
+                        if file.lower().endswith(f".{ext}"):
+                            downloaded_file_path = os.path.join(root, file)
+                            break
+                    if downloaded_file_path:
+                        break
+                        
+                if downloaded_file_path and os.path.exists(downloaded_file_path):
+                    import shutil
+                    try:
+                        shutil.move(downloaded_file_path, output_file)
+                        download_success = True
+                    except Exception as move_err:
+                        print(f"Error moving Soulseek download: {move_err}")
+                        
+            # Cleanup temp directory
+            import shutil
+            try:
+                shutil.rmtree(temp_dir)
+            except Exception:
+                pass
+                
+        # 2. Try YouTube Music fallback
+        if not download_success:
+            from app.youtubedl import download_from_youtube_search
+            download_success = download_from_youtube_search(query, output_file, ext, config)
+            
+        # 3. Raise error if both failed
+        if not download_success:
+            raise RuntimeError(f"Both primary source and fallbacks failed for '{title}'")
+            
+        # 4. Tag the downloaded file
+        if ext == "flac":
+            try:
+                _add_vorbis_tags(song, output_file)
+            except Exception as tag_err:
+                print(f"Warning: Could not tag FLAC fallback: {tag_err}")
+        else:
+            try:
+                tag_mp3_file(song, output_file)
+            except Exception as tag_err:
+                print(f"Warning: Could not tag MP3 fallback: {tag_err}")
+                
+        # 5. Download lyrics if enabled
+        try:
+            _download_lrc(song.get("SNG_ID"), output_file)
+        except Exception as lrc_err:
+            print(f"Warning: Could not download lyrics for fallback: {lrc_err}")
 
 
 def clean_filename(name: str) -> str:
@@ -113,7 +211,7 @@ def download_track(track_id: int, config, queue=None):
     filename = _song_filename(song)
     out = os.path.join(config["download_dirs"]["songs"], filename)
     if not os.path.exists(out):
-        download_song(song, out)
+        download_song_with_fallback(song, out, config)
     else:
         print(f"Skipping (exists): {out}")
     return out
@@ -180,7 +278,7 @@ def download_album(album_id: int, config, queue=None):
                 # Force album artist in metadata
                 song_copy = dict(song)
                 song_copy["ART_NAME"] = album_artist
-                download_song(song_copy, out)
+                download_song_with_fallback(song_copy, out, config)
             downloaded.append(out)
         except Exception as e:
             print(f"Warning: {e}")
@@ -209,7 +307,7 @@ def download_playlist(playlist_id: str, config, queue=None):
             filename = _song_filename(song)
             out = os.path.join(playlist_dir, filename)
             if not os.path.exists(out):
-                download_song(song, out)
+                download_song_with_fallback(song, out, config)
             downloaded.append(out)
         except Exception as e:
             print(f"Warning: {e}")
@@ -257,7 +355,7 @@ def download_spotify_playlist(playlist_name: str, playlist_url: str, config, que
             filename = _song_filename(song)
             out = os.path.join(playlist_dir, filename)
             if not os.path.exists(out):
-                download_song(song, out)
+                download_song_with_fallback(song, out, config)
             downloaded.append(out)
         except Exception as e:
             print(f"Warning ({song_query}): {e}")
@@ -290,7 +388,7 @@ def download_favorites(user_id: str, config, queue=None):
             filename = _song_filename(song)
             out = os.path.join(fav_dir, filename)
             if not os.path.exists(out):
-                download_song(song, out)
+                download_song_with_fallback(song, out, config)
             downloaded.append(out)
         except Exception as e:
             print(f"Warning: {e}")

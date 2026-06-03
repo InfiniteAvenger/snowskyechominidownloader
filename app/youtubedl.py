@@ -65,3 +65,73 @@ def youtubedl_download(url: str, destination_dir: str, ytdlp_cmd: str = "yt-dlp"
 
 class YoutubeDLError(Exception):
     pass
+
+
+def download_from_youtube_search(query: str, output_file: str, audio_format: str, config) -> bool:
+    """Download audio from a YouTube search query directly to output_file."""
+    ytdlp_cmd = config.get("youtubedl", "command", fallback="yt-dlp")
+    resolved_cmd = resolve_ytdlp_cmd(ytdlp_cmd)
+    proxy = config.get("proxy", "server", fallback="").strip() or None
+    
+    cmd = [resolved_cmd]
+    if proxy:
+        cmd.extend(["--proxy", proxy])
+    cmd.extend([
+        "-x",
+        "--audio-format", audio_format,
+        "--audio-quality", "0",
+        "--no-embed-chapters",
+        "--no-playlist",
+        "-o", output_file,
+        f"ytsearch1:{query}"
+    ])
+    
+    print(f"Executing YouTube fallback: {' '.join(cmd)}")
+    try:
+        p = Popen(cmd, stdout=PIPE, stderr=PIPE)
+        p.wait()
+        stdout, stderr = p.communicate()
+        if p.returncode == 0:
+            return True
+        else:
+            print(f"yt-dlp search download failed: {stderr.decode('utf-8', errors='ignore')}")
+            return False
+    except Exception as e:
+        print(f"Error executing yt-dlp fallback: {e}")
+        return False
+
+
+def download_from_soulseek_search(query: str, temp_dir: str, audio_format: str, username: str, password: str, sldl_cmd: str) -> bool:
+    """Download audio from Soulseek using sldl CLI executable."""
+    import shutil
+    from subprocess import Popen, PIPE
+    
+    # Resolve command
+    if sldl_cmd == "sldl" and shutil.which("sldl.exe"):
+        resolved_cmd = "sldl.exe"
+    elif sldl_cmd == "sldl" and shutil.which("sldl"):
+        resolved_cmd = "sldl"
+    else:
+        resolved_cmd = sldl_cmd
+        
+    cmd = [
+        resolved_cmd,
+        query,
+        "--user", username,
+        "--pass", password,
+        "--pref-format", audio_format
+    ]
+    
+    print(f"Executing Soulseek fallback: {' '.join(cmd)} inside Cwd: {temp_dir}")
+    try:
+        p = Popen(cmd, cwd=temp_dir, stdout=PIPE, stderr=PIPE)
+        p.wait()
+        stdout, stderr = p.communicate()
+        if p.returncode == 0:
+            return True
+        else:
+            print(f"sldl failed: {stderr.decode('utf-8', errors='ignore')}")
+            return False
+    except Exception as e:
+        print(f"Error executing sldl: {e}")
+        return False

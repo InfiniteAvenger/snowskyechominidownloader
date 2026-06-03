@@ -246,7 +246,11 @@ def create_app(config) -> Flask:
             "auto_redirect_queue": settings.get("auto_redirect_queue", False),
             "item_size": settings.get("item_size", "standard"),
             "download_lrc": settings.get("download_lrc", True),
-            "free_space": free_space_str
+            "free_space": free_space_str,
+            "soulseek_enabled": settings.get("soulseek_enabled", False),
+            "soulseek_username": settings.get("soulseek_username", ""),
+            "soulseek_password": settings.get("soulseek_password", ""),
+            "sldl_command": settings.get("sldl_command", "sldl")
         })
 
     @app.route("/api/settings", methods=["POST"])
@@ -260,6 +264,11 @@ def create_app(config) -> Flask:
         auto_redirect_queue = data.get("auto_redirect_queue", False)
         item_size = data.get("item_size", "standard")
         download_lrc = data.get("download_lrc", True)
+
+        soulseek_enabled = data.get("soulseek_enabled", False)
+        soulseek_username = data.get("soulseek_username", "").strip()
+        soulseek_password = data.get("soulseek_password", "").strip()
+        sldl_command = data.get("sldl_command", "sldl").strip()
 
         app.deezer.download_lrc_enabled = download_lrc
 
@@ -287,7 +296,11 @@ def create_app(config) -> Flask:
                     "layout_mode": layout_mode,
                     "auto_redirect_queue": auto_redirect_queue,
                     "item_size": item_size,
-                    "download_lrc": download_lrc
+                    "download_lrc": download_lrc,
+                    "soulseek_enabled": soulseek_enabled,
+                    "soulseek_username": soulseek_username,
+                    "soulseek_password": soulseek_password,
+                    "sldl_command": sldl_command
                 }, f, indent=2)
         except Exception as e:
             print(f"WARNING: Could not save settings.json: {e}")

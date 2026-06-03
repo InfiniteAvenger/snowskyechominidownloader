@@ -2,5 +2,10 @@
   "output_dir": "G:\\",
   "layout_mode": "full",
   "auto_redirect_queue": false,
-  "item_size": "large"
+  "item_size": "large",
+  "download_lrc": true,
+  "soulseek_enabled": false,
+  "soulseek_username": "",
+  "soulseek_password": "",
+  "sldl_command": "sldl"
 }

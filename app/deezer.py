@@ -562,6 +562,67 @@ def _add_vorbis_tags(song: dict, output_file: str):
         print(f"ERROR adding Vorbis tags: {e}")
 
 
+def tag_mp3_file(song: dict, output_file: str):
+    """Tag an existing MP3 file with song metadata using mutagen."""
+    try:
+        from mutagen.mp3 import EasyMP3
+        from mutagen.id3 import ID3, APIC
+        from PIL import Image
+        import io
+
+        audio = EasyMP3(output_file)
+        try:
+            audio.delete()
+        except Exception:
+            pass
+
+        audio['title'] = song.get('SNG_TITLE', 'Unknown Title')
+        audio['artist'] = song.get('ART_NAME', 'Unknown Artist')
+        audio['album'] = song.get('ALB_TITLE', 'Unknown Album')
+        
+        track = song.get('TRACK_NUMBER', '0')
+        audio['tracknumber'] = str(track)
+        
+        disc = song.get('DISK_NUMBER', '1')
+        audio['discnumber'] = str(disc)
+
+        genres = _collect_genres(song)
+        if genres:
+            audio['genre'] = genres
+
+        release_date = _get_release_date(song)
+        if release_date:
+            audio['date'] = release_date
+
+        audio.save()
+
+        # Write cover art
+        if "ALB_PICTURE" in song:
+            try:
+                pic_data = _download_picture(song["ALB_PICTURE"])
+                if pic_data:
+                    img = Image.open(io.BytesIO(pic_data))
+                    img = img.resize((750, 750), Image.LANCZOS)
+                    buf = io.BytesIO()
+                    img.save(buf, format="JPEG", quality=90, optimize=True, progressive=False)
+                    pic_data = buf.getvalue()
+
+                    id3 = ID3(output_file)
+                    id3.add(APIC(
+                        encoding=3, # UTF-8
+                        mime='image/jpeg',
+                        type=3, # cover front
+                        desc='Cover (Front)',
+                        data=pic_data
+                    ))
+                    id3.save()
+            except Exception as pic_err:
+                print(f"Could not add cover art to fallback MP3: {pic_err}")
+
+    except Exception as e:
+        print(f"Error tagging fallback MP3: {e}")
+
+
 def _collect_genres(song: dict) -> list:
     genres = []
     # From song

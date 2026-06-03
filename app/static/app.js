@@ -830,6 +830,11 @@ async function openSettings() {
   $('#settings-item-size').value = data.item_size || 'standard';
   $('#settings-auto-redirect').checked = data.auto_redirect_queue || false;
   $('#settings-download-lrc').checked = data.download_lrc !== false;
+  $('#settings-soulseek-enabled').checked = data.soulseek_enabled || false;
+  $('#settings-soulseek-user').value = data.soulseek_username || '';
+  $('#settings-soulseek-pass').value = data.soulseek_password || '';
+  $('#settings-sldl-command').value = data.sldl_command || 'sldl';
+  $('#soulseek-settings-details').style.display = data.soulseek_enabled ? 'flex' : 'none';
   $('#settings-storage-free').textContent = data.free_space || 'Unknown';
   $('#settings-modal').classList.add('show');
 }
@@ -843,13 +848,21 @@ async function saveSettings() {
   const itemSize = $('#settings-item-size').value;
   const autoRedirect = $('#settings-auto-redirect').checked;
   const downloadLrc = $('#settings-download-lrc').checked;
+  const soulseekEnabled = $('#settings-soulseek-enabled').checked;
+  const soulseekUser = $('#settings-soulseek-user').value.trim();
+  const soulseekPass = $('#settings-soulseek-pass').value.trim();
+  const sldlCommand = $('#settings-sldl-command').value.trim();
 
   await api('/settings', {
     output_dir: dir,
     layout_mode: layout,
     auto_redirect_queue: autoRedirect,
     item_size: itemSize,
-    download_lrc: downloadLrc
+    download_lrc: downloadLrc,
+    soulseek_enabled: soulseekEnabled,
+    soulseek_username: soulseekUser,
+    soulseek_password: soulseekPass,
+    sldl_command: sldlCommand
   });
 
   appSettings = {
@@ -857,7 +870,11 @@ async function saveSettings() {
     layout_mode: layout,
     auto_redirect_queue: autoRedirect,
     item_size: itemSize,
-    download_lrc: downloadLrc
+    download_lrc: downloadLrc,
+    soulseek_enabled: soulseekEnabled,
+    soulseek_username: soulseekUser,
+    soulseek_password: soulseekPass,
+    sldl_command: sldlCommand
   };
 
   applyLayoutMode(layout);
@@ -916,6 +933,9 @@ document.addEventListener('DOMContentLoaded', () => {
   $('#btn-settings').onclick = openSettings;
   $('#btn-close-settings').onclick = closeSettings;
   $('#btn-save-settings').onclick = saveSettings;
+  $('#settings-soulseek-enabled').onchange = () => {
+    $('#soulseek-settings-details').style.display = $('#settings-soulseek-enabled').checked ? 'flex' : 'none';
+  };
   $('#btn-close-preview').onclick = closePreview;
   $('#btn-preview-play').onclick = togglePlayPreview;
   $('#btn-preview-mute').onclick = toggleMutePreview;
