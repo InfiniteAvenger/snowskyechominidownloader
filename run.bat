@@ -13,8 +13,13 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
-:: Execute the server script
-venv\Scripts\python run.py
+:: Execute the server script using venv python if available, otherwise system python
+set PYTHON_CMD=python
+if exist venv\Scripts\python.exe (
+    set PYTHON_CMD=venv\Scripts\python
+)
+
+%PYTHON_CMD% run.py
 
 :: If the server crashed or exited with an error, keep the window open
 if %errorlevel% neq 0 (
