@@ -23,6 +23,9 @@ A lightweight, modern web-based audio downloader and tagging utility optimized f
   - Compact Centered / Full-width layouts.
   - Compact, Standard, and Large density display sizing.
   - Graceful drive-disconnection warnings (e.g. if your Echo Mini drive `G:\` is unplugged).
+- **Automated Fallback Download Pipeline**: If a track is unavailable on Deezer (e.g. licensing restrictions for Free accounts), the app automatically routes it through fallback channels:
+  - **Soulseek Fallback** (disabled by default): Configurable via settings. If enabled, searches and downloads the track using the `sldl` CLI tool.
+  - **YouTube Music Fallback**: Default fallback that searches YouTube, downloads and extracts the audio, and tags it with full Deezer metadata and cover art.
 
 ---
 
@@ -60,6 +63,13 @@ pip install -r requirements.txt
      ```ini
      cookie_arl = <your_arl_cookie_here>
      ```
+
+### 5. Soulseek Fallback Setup (Optional)
+To use Soulseek fallbacks when Deezer downloads fail:
+1. Open the web interface settings (gear icon).
+2. Toggle on **Enable Soulseek fallback**.
+3. Input your Soulseek **Username** and **Password** (credentials are saved locally in `settings.json` and kept out of Git).
+4. Make sure you have the `sldl` CLI executable on your system path, or specify the custom path in **sldl Command / Path**.
 
 ---
 
