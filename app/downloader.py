@@ -122,13 +122,51 @@ def download_track(track_id: int, config, queue=None):
 def download_album(album_id: int, config, queue=None):
     """Download an album to Albums/Artist/AlbumTitle/."""
     songs = get_song_infos_from_deezer_website(TYPE_ALBUM, album_id)
-    if songs and queue:
-        first_song = songs[0]
-        album_title = first_song.get("ALB_TITLE", "Unknown Album")
-        artist_name = first_song.get("ART_NAME", "Unknown Artist")
+    if not songs:
+        return []
+
+    first_song = songs[0]
+    album_title = first_song.get("ALB_TITLE", "Unknown Album")
+    
+    # Resolve album artist once for the entire album
+    album_artist = "Unknown Artist"
+    aid = first_song.get("ALB_ID")
+    if aid:
+        cached = _album_artist_cache.get(aid)
+        if cached:
+            album_artist = cached
+        else:
+            try:
+                info = get_album_data(aid)
+                if info and info.get("ART_NAME"):
+                    album_artist = info["ART_NAME"]
+                    _album_artist_cache[aid] = album_artist
+            except Exception:
+                pass
+
+    # Fallback to the most frequent artist in the tracklist if lookup failed
+    if album_artist == "Unknown Artist":
+        from collections import Counter
+        artist_counts = Counter(s.get("ART_NAME", "Unknown Artist") for s in songs)
+        if artist_counts:
+            album_artist = artist_counts.most_common(1)[0][0]
+
+    # Cache the resolved artist
+    if aid and album_artist != "Unknown Artist" and aid not in _album_artist_cache:
+        _album_artist_cache[aid] = album_artist
+
+    if queue:
         pic_id = first_song.get("ALB_PICTURE")
         img_url = f"https://e-cdns-images.dzcdn.net/images/cover/{pic_id}/250x250.jpg" if pic_id else ""
-        queue.update_metadata(title=album_title, artist=artist_name, img_url=img_url)
+        queue.update_metadata(title=album_title, artist=album_artist, img_url=img_url)
+
+    # Create single directory for the album
+    album_dir = os.path.join(
+        config["download_dirs"]["albums"],
+        clean_filename(album_artist),
+        clean_filename(album_title),
+    )
+    os.makedirs(album_dir, exist_ok=True)
 
     downloaded = []
     for i, song in enumerate(songs):
@@ -136,49 +174,19 @@ def download_album(album_id: int, config, queue=None):
             track_title = song.get("SNG_TITLE", "Unknown Track")
             queue.report_progress(i, len(songs), f"Downloading: {track_title}")
         try:
-            # Determine artist (prefer album artist over track artist)
-            aid = song.get("ALB_ID")
-            artist = song.get("ART_NAME", "Unknown Artist")
-            if aid:
-                cached = _album_artist_cache.get(aid)
-                if cached:
-                    artist = cached
-                else:
-                    try:
-                        info = get_album_data(aid)
-                        if info and info.get("ART_NAME"):
-                            artist = info["ART_NAME"]
-                            _album_artist_cache[aid] = artist
-                    except Exception:
-                        pass
-
-            album_title = song.get("ALB_TITLE", "Unknown Album")
-            album_dir = os.path.join(
-                config["download_dirs"]["albums"],
-                clean_filename(artist),
-                clean_filename(album_title),
-            )
-            os.makedirs(album_dir, exist_ok=True)
-
             filename = _song_filename(song)
             out = os.path.join(album_dir, filename)
             if not os.path.exists(out):
                 # Force album artist in metadata
                 song_copy = dict(song)
-                song_copy["ART_NAME"] = artist
+                song_copy["ART_NAME"] = album_artist
                 download_song(song_copy, out)
             downloaded.append(out)
         except Exception as e:
             print(f"Warning: {e}")
 
-    if downloaded and songs:
-        first_song = songs[0]
-        aid = first_song.get("ALB_ID")
-        resolved_artist = first_song.get("ART_NAME", "Unknown Artist")
-        if aid and _album_artist_cache.get(aid):
-            resolved_artist = _album_artist_cache[aid]
-        album_title_str = first_song.get("ALB_TITLE", "Unknown Album")
-        album_cache.add(resolved_artist, album_title_str)
+    if downloaded:
+        album_cache.add(album_artist, album_title)
 
     return downloaded
 
