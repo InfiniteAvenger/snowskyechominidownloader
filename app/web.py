@@ -137,7 +137,7 @@ def create_app(config) -> Flask:
         url = data.get("url", "").strip()
         if not url or not url.startswith("http"):
             return jsonify({"error": "Invalid URL"}), 400
-        task = queue.enqueue("Downloading via yt-dlp", download_youtube, url=url, config=config, queue=queue)
+        task = queue.enqueue("Downloading via yt-dlp", download_youtube, url=url, config=config, queue=queue, source="youtube")
         return jsonify({"task_id": task.id})
 
     @app.route("/api/playlist/deezer", methods=["POST"])
@@ -209,6 +209,11 @@ def create_app(config) -> Flask:
         task_id = int(data.get("task_id", 0))
         success = queue.retry_task(task_id)
         return jsonify({"status": "ok" if success else "error"})
+
+    @app.route("/api/health")
+    def api_health():
+        from app.deezer import check_arl_health
+        return jsonify(check_arl_health())
 
     # ── Settings ──
 

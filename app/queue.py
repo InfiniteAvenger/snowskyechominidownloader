@@ -22,6 +22,7 @@ class Task:
     current_item: str = ""
     music_id: str = ""
     music_type: str = ""
+    source: str = ""
     _fn: Callable = None
     _kwargs: dict = field(default_factory=dict)
 
@@ -40,6 +41,7 @@ class Task:
             "current_item": self.current_item,
             "music_id": self.music_id,
             "music_type": self.music_type,
+            "source": self.source,
         }
 
 
@@ -51,7 +53,7 @@ class TaskQueue:
         self._lock = threading.Lock()
         self._current_task = threading.local()
 
-    def enqueue(self, description: str, fn: Callable, title: str = "", artist: str = "", img_url: str = "", music_id: str = "", music_type: str = "", **kwargs) -> Task:
+    def enqueue(self, description: str, fn: Callable, title: str = "", artist: str = "", img_url: str = "", music_id: str = "", music_type: str = "", source: str = "", **kwargs) -> Task:
         with self._lock:
             self._id_counter += 1
             task = Task(
@@ -62,6 +64,7 @@ class TaskQueue:
                 img_url=img_url,
                 music_id=music_id,
                 music_type=music_type,
+                source=source,
                 _fn=fn,
                 _kwargs=kwargs
             )
@@ -103,6 +106,18 @@ class TaskQueue:
             if description:
                 t.description = description
 
+    def add_task_source(self, source: str):
+        """Add a source to the currently running task."""
+        t = getattr(self._current_task, "task", None)
+        if t:
+            if not t.source:
+                t.source = source
+            else:
+                sources = [s.strip() for s in t.source.split(",") if s.strip()]
+                if source not in sources:
+                    sources.append(source)
+                    t.source = ", ".join(sources)
+
     def clear_completed(self):
         """Remove completed or failed tasks from the list."""
         with self._lock:
@@ -119,6 +134,7 @@ class TaskQueue:
             task.progress = 0
             task.progress_max = 0
             task.current_item = "Retrying..."
+            task.source = ""
             
             fn = task._fn
             kwargs = task._kwargs

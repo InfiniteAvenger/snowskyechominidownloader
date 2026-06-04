@@ -6,7 +6,7 @@
   <title>Snowsky Echo Mini Downloader</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=2">
   <link rel="alternate icon" type="image/x-icon" href="/static/favicon.ico?v=2">
-  <link rel="stylesheet" href="/static/style.css?v=4">
+  <link rel="stylesheet" href="/static/style.css?v=5">
 </head>
 <body>
 
@@ -19,6 +19,7 @@
         <path d="M 2 12 L 9 12 L 5 16" />
       </svg>
       <span class="brand">Snowsky Echo Mini Downloader</span>
+      <span id="deezer-health-badge" class="health-badge checking" title="Checking Deezer Connection...">Deezer: Checking...</span>
     </div>
     <div class="header-right">
       <button id="btn-settings" class="icon-btn" title="Settings">
@@ -47,9 +48,22 @@
           <input type="text" id="search-input" placeholder="Search songs, albums, or artists..." autofocus>
         </div>
         <div class="search-type-row">
-          <button class="chip active" data-search="track">Tracks</button>
-          <button class="chip" data-search="album">Albums</button>
-          <button class="chip" data-search="artist">Artists</button>
+          <div class="search-chips">
+            <button class="chip active" data-search="track">Tracks</button>
+            <button class="chip" data-search="album">Albums</button>
+            <button class="chip" data-search="artist">Artists</button>
+          </div>
+          <div id="search-sort-container" class="search-sort-container" style="display:none">
+            <label for="search-sort" class="field-label" style="display:inline; margin:0 0.35rem 0 0; text-transform:none; font-size:0.75rem; font-weight:600;">Sort:</label>
+            <select id="search-sort" class="search-sort-select">
+              <option value="default">Relevance</option>
+              <option value="year-desc">Newest First</option>
+              <option value="year-asc">Oldest First</option>
+              <option value="alpha-asc">Alphabetical (A-Z)</option>
+              <option value="alpha-desc">Alphabetical (Z-A)</option>
+              <option value="artist-asc">Artist (A-Z)</option>
+            </select>
+          </div>
         </div>
       </div>
       <div id="results-container">
@@ -244,6 +258,6 @@
   <!-- Toast -->
   <div id="toast" class="toast"></div>
 
-  <script src="/static/app.js?v=3"></script>
+  <script src="/static/app.js?v=4"></script>
 </body>
 </html>

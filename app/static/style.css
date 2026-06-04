@@ -82,6 +82,30 @@ header {
   font-weight: 700;
   letter-spacing: -0.02em;
 }
+.health-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-full);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: 0.5rem;
+  cursor: default;
+  user-select: none;
+}
+.health-badge.checking {
+  background: var(--bg-inset);
+  color: var(--text-2);
+}
+.health-badge.ok {
+  background: var(--green-soft);
+  color: var(--green);
+}
+.health-badge.invalid, .health-badge.error {
+  background: var(--red-soft);
+  color: var(--red);
+}
 .header-right {
   display: flex;
   gap: 0.25rem;
@@ -180,10 +204,41 @@ input[type="text"]::placeholder, input[type="password"]::placeholder { color: va
 
 .search-type-row {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 0.35rem;
   margin-top: 0.6rem;
   padding-top: 0.6rem;
   border-top: 1px solid var(--border);
+}
+.search-chips {
+  display: flex;
+  gap: 0.35rem;
+}
+.search-sort-container {
+  display: flex;
+  align-items: center;
+}
+.search-sort-select {
+  padding: 0.3rem 0.5rem;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
+  color: var(--text-2);
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.search-sort-select:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.search-sort-select:focus {
+  border-color: var(--accent);
+  color: var(--text);
 }
 
 .chip {
@@ -279,6 +334,13 @@ input[type="text"]::placeholder, input[type="password"]::placeholder { color: va
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.release-year {
+  color: var(--text-2);
+  opacity: 0.7;
+  font-size: 0.75rem;
+  margin-left: 0.25rem;
+  display: inline;
 }
 
 .result-actions {
@@ -422,11 +484,54 @@ input[type="text"]::placeholder, input[type="password"]::placeholder { color: va
 .queue-meta {
   font-size: 0.75rem;
   color: var(--text-2);
-  margin-top: 0.15rem;
-  margin-bottom: 0.15rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.queue-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-width: 0;
+  margin-top: 0.15rem;
+  margin-bottom: 0.15rem;
+}
+.queue-meta-row .queue-meta {
+  margin: 0;
+  flex: 1;
+}
+.queue-source-logos {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+.queue-source-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  opacity: 0.85;
+  transition: opacity 0.15s ease;
+}
+.queue-source-logo:hover {
+  opacity: 1;
+}
+.queue-source-logo svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+.queue-source-logo.deezer {
+  color: #ef5466;
+}
+.queue-source-logo.youtube {
+  color: #ff0000;
+}
+.queue-source-logo.soulseek {
+  color: #1fa0e5;
 }
 .queue-error {
   font-size: 0.75rem;

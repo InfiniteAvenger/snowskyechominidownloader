@@ -41,6 +41,12 @@ const ICONS = {
   clock:    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
 };
 
+const LOGOS = {
+  deezer:   '<svg viewBox="0 0 576 512" fill="currentColor"><path d="M451.46,244.71H576V172H451.46Zm0-173.89v72.67H576V70.82Zm0,275.06H576V273.2H451.46ZM0,447.09H124.54V374.42H0Zm150.47,0H275V374.42H150.47Zm150.52,0H425.53V374.42H301Zm150.47,0H576V374.42H451.46ZM301,345.88H425.53V273.2H301Zm-150.52,0H275V273.2H150.47Zm0-101.17H275V172H150.47Z"/></svg>',
+  youtube:  '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.163a3.003 3.003 0 0 0-2.11-2.108C19.52 3.5 12 3.5 12 3.5s-7.52 0-9.388.555a3.002 3.002 0 0 0-2.11 2.108C0 8.03 0 12 0 12s0 3.97.502 5.837a3.003 3.003 0 0 0 2.11 2.108C4.48 20.5 12 20.5 12 20.5s7.52 0 9.388-.555a3.003 3.003 0 0 0 2.11-2.108C24 15.97 24 12 24 12s0-3.97-.502-5.837zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>',
+  soulseek: '<svg viewBox="0 0 500 498" fill="currentColor"><path d="m 276.63897,193.26805 c -3.53902,18.87479 24.77316,24.77316 24.77316,24.77316 0,0 17.69512,4.7187 71.96014,-25.95283 54.26502,-30.67154 79.03818,-56.62437 79.03818,-56.62437 l -8.25772,18.87479 12.97642,-1.17968 -8.25772,16.51544 h 10.61706 l -12.97641,18.87479 5.89837,3.53903 -15.33577,16.51544 3.53903,7.07804 c 0,0 -23.59349,29.49186 -50.726,49.54633 -27.13251,20.05446 -40.10893,35.39023 -94.37395,66.06176 -27.13251,38.92926 -125.04548,117.96744 -125.04548,117.96744 l 3.53902,-18.87479 c 0,0 -10.61707,3.53902 -31.85121,12.97642 -1.17967,-9.4374 5.89838,-17.69512 5.89838,-17.69512 0,0 -3.53903,3.53902 -34.21056,12.97642 8.25772,-14.15609 15.33577,-20.05447 15.33577,-20.05447 0,0 -15.33577,3.53903 -31.851214,8.25772 1.17967,-16.51544 36.569904,-30.67153 36.569904,-30.67153 0,0 -9.43739,4.7187 -28.31218,4.7187 18.87479,-23.59349 82.5772,-48.36665 82.5772,-48.36665 0,0 21.23414,-22.41381 3.53903,-28.31219 -17.69512,-5.89837 -24.77316,1.17968 -24.77316,1.17968 0,0 -14.1561,-4.7187 -29.49186,-11.79674 -15.33577,-7.07805 -41.288614,-31.85121 -41.288614,-31.85121 l -55.44469,-66.06177 c 0,0 -2.35935,-8.25772 9.43739,-8.25772 -8.25772,-9.43739 -9.43739,-17.69511 -9.43739,-17.69511 l 4.7187,-8.25772 v -12.97642 c 0,0 -4.7187,-11.79675 11.79674,-4.7187 -10.61707,-5.89837 -7.07805,-18.87479 -9.43739,-35.39023 8.25772,24.77316 44.82762,54.26502 44.82762,54.26502 0,0 3.53902,5.89837 42.468284,22.41381 38.92925,16.51544 84.93655,12.97642 84.93655,12.97642 0,0 -1.17967,-1.17967 2.35935,-11.79674 3.53902,-10.61707 -12.97642,-8.25772 -16.51544,-30.67154 5.89837,-31.8512 -33.03088,-47.18697 -33.03088,-47.18697 0,0 8.25772,-5.89837 17.69511,-4.7187 9.4374,1.17968 -18.87479,-10.61707 -14.15609,-12.97642 4.7187,-2.35934 16.51544,4.7187 16.51544,4.7187 l -12.97642,-9.43739 c 0,0 1.17968,-2.35935 11.79675,-1.17968 10.61707,1.17968 -2.35935,-5.898367 -9.4374,-15.335757 10.61707,-4.7187 9.4374,4.71869 16.51544,4.71869 -1.17967,-9.43739 -14.15609,-22.41381 -14.15609,-22.41381 0,0 17.69512,4.7187 22.41381,11.79674 -2.35934,-10.61707 -14.15609,-33.030882 -14.15609,-33.030882 0,0 25.95284,5.898372 38.92926,18.874792 24.77316,24.77316 53.08534,53.085347 53.08534,53.085347 l 30.67154,56.62437 -21.23414,4.7187 9.43739,23.59348 z"/></svg>'
+};
+
 // ── Theme ──
 
 function initTheme() {
@@ -82,6 +88,7 @@ function initTabs() {
 // ── Search ──
 
 let searchType = 'track';
+let currentSearchResults = [];
 
 function initSearch() {
   $$('.chip[data-search]').forEach(chip => {
@@ -101,7 +108,10 @@ async function doSearch() {
   if (!query) return;
 
   const container = $('#results-container');
+  const sortWrapper = $('#search-sort-container');
   container.innerHTML = '<div class="empty-state"><p>Searching...</p></div>';
+  sortWrapper.style.display = 'none';
+  currentSearchResults = [];
 
   try {
     const results = await api('/search', { type: searchType, query });
@@ -109,11 +119,55 @@ async function doSearch() {
       container.innerHTML = '<div class="empty-state"><p>No results found</p></div>';
       return;
     }
-    container.innerHTML = '';
-    results.forEach(item => container.appendChild(buildResult(item)));
+    currentSearchResults = results;
+    sortWrapper.style.display = 'flex';
+    $('#search-sort').value = 'default';
+    renderSearchResults();
   } catch {
     container.innerHTML = '<div class="empty-state"><p>Search failed</p></div>';
   }
+}
+
+function renderSearchResults() {
+  const container = $('#results-container');
+  container.innerHTML = '';
+
+  const sortValue = $('#search-sort').value;
+  let items = [...currentSearchResults];
+
+  if (sortValue === 'year-desc') {
+    items.sort((a, b) => {
+      const ya = parseInt(a.year) || 0;
+      const yb = parseInt(b.year) || 0;
+      return yb - ya;
+    });
+  } else if (sortValue === 'year-asc') {
+    items.sort((a, b) => {
+      const ya = parseInt(a.year) || 9999;
+      const yb = parseInt(b.year) || 9999;
+      return ya - yb;
+    });
+  } else if (sortValue === 'alpha-asc') {
+    items.sort((a, b) => {
+      const ta = (a.title || a.album || '').toLowerCase();
+      const tb = (b.title || b.album || '').toLowerCase();
+      return ta.localeCompare(tb);
+    });
+  } else if (sortValue === 'alpha-desc') {
+    items.sort((a, b) => {
+      const ta = (a.title || a.album || '').toLowerCase();
+      const tb = (b.title || b.album || '').toLowerCase();
+      return tb.localeCompare(ta);
+    });
+  } else if (sortValue === 'artist-asc') {
+    items.sort((a, b) => {
+      const aa = (a.artist || '').toLowerCase();
+      const ab = (b.artist || '').toLowerCase();
+      return aa.localeCompare(ab);
+    });
+  }
+
+  items.forEach(item => container.appendChild(buildResult(item)));
 }
 
 function buildResult(item) {
@@ -151,11 +205,20 @@ function buildResult(item) {
   `;
   
   const metaContainer = div.querySelector('.result-meta');
+  
+  const artistSpan = document.createElement('span');
+  artistSpan.className = 'artist-name';
+  artistSpan.textContent = item.artist;
+  metaContainer.appendChild(artistSpan);
+
+  if (item.year) {
+    const yearSpan = document.createElement('span');
+    yearSpan.className = 'release-year';
+    yearSpan.textContent = ` (${item.year})`;
+    metaContainer.appendChild(yearSpan);
+  }
+
   if (item.title) {
-    const artistSpan = document.createElement('span');
-    artistSpan.textContent = item.artist;
-    metaContainer.appendChild(artistSpan);
-    
     metaContainer.appendChild(document.createTextNode(' · '));
     
     const albumLink = document.createElement('span');
@@ -167,8 +230,6 @@ function buildResult(item) {
       showAlbumModal(item.album_id, item.album, item.artist, item.img_url);
     });
     metaContainer.appendChild(albumLink);
-  } else {
-    metaContainer.textContent = item.artist;
   }
   
   const actionsContainer = div.querySelector('.result-actions');
@@ -784,11 +845,27 @@ async function refreshQueue() {
         }
       }
 
+      let sourceLogosHtml = '';
+      if (t.source) {
+        const sources = t.source.split(',').map(s => s.trim().toLowerCase());
+        sources.forEach(src => {
+          if (LOGOS[src]) {
+            sourceLogosHtml += `<span class="queue-source-logo ${src}" title="Source: ${src.charAt(0).toUpperCase() + src.slice(1)}">${LOGOS[src]}</span>`;
+          }
+        });
+      }
+      if (sourceLogosHtml) {
+        sourceLogosHtml = `<span class="queue-source-logos">${sourceLogosHtml}</span>`;
+      }
+
       div.innerHTML = `
         ${img}
         <div class="queue-info">
           <div class="queue-desc">${esc(cleanDesc)}</div>
-          <div class="queue-meta">${esc(cleanMeta)}</div>
+          <div class="queue-meta-row">
+            <span class="queue-meta">${esc(cleanMeta)}</span>
+            ${sourceLogosHtml}
+          </div>
           ${progress}${error}${retryBtn}
         </div>
         <span class="pill pill-${t.state}">${t.state}</span>
@@ -910,6 +987,32 @@ function initKeys() {
 
 // ── Boot ──
 
+async function checkDeezerHealth() {
+  const badge = $('#deezer-health-badge');
+  if (!badge) return;
+
+  try {
+    const health = await api('/health');
+    if (health.status === 'ok') {
+      badge.className = 'health-badge ok';
+      badge.textContent = 'Deezer: Connected';
+      badge.title = `Logged in as: ${health.username || 'unknown'}\nPremium Account: ${health.premium ? 'Yes' : 'No'}`;
+    } else if (health.status === 'invalid') {
+      badge.className = 'health-badge invalid';
+      badge.textContent = 'Deezer: Expired';
+      badge.title = health.message || 'ARL cookie is expired or invalid.';
+    } else {
+      badge.className = 'health-badge error';
+      badge.textContent = 'Deezer: Error';
+      badge.title = health.message || 'Unknown error occurred.';
+    }
+  } catch (e) {
+    badge.className = 'health-badge error';
+    badge.textContent = 'Deezer: Offline';
+    badge.title = 'Failed to connect to local backend service.';
+  }
+}
+
 async function loadSettingsOnBoot() {
   try {
     const data = await api('/settings');
@@ -928,6 +1031,8 @@ document.addEventListener('DOMContentLoaded', () => {
   initSearch();
   initKeys();
   loadSettingsOnBoot();
+  checkDeezerHealth();
+  $('#search-sort').onchange = renderSearchResults;
 
   $('#btn-theme').onclick = toggleTheme;
   $('#btn-settings').onclick = openSettings;
@@ -1000,4 +1105,7 @@ document.addEventListener('DOMContentLoaded', () => {
       updateRealtimeStatuses(tasks);
     }).catch(() => {});
   }, 5000);
+
+  // Periodic ARL health checks
+  setInterval(checkDeezerHealth, 60000);
 });

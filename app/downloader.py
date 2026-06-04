@@ -17,9 +17,11 @@ from app.youtubedl import youtubedl_download
 _album_artist_cache = {}
 
 
-def download_song_with_fallback(song: dict, output_file: str, config) -> None:
+def download_song_with_fallback(song: dict, output_file: str, config, queue=None) -> None:
     try:
         download_song(song, output_file)
+        if queue:
+            queue.add_task_source("deezer")
     except Exception as primary_err:
         print(f"WARNING: Primary download failed for '{song.get('SNG_TITLE', 'Unknown')}' ({primary_err}). Trying fallback sources...")
         
@@ -77,6 +79,8 @@ def download_song_with_fallback(song: dict, output_file: str, config) -> None:
                     try:
                         shutil.move(downloaded_file_path, output_file)
                         download_success = True
+                        if queue:
+                            queue.add_task_source("soulseek")
                     except Exception as move_err:
                         print(f"Error moving Soulseek download: {move_err}")
                         
@@ -91,6 +95,8 @@ def download_song_with_fallback(song: dict, output_file: str, config) -> None:
         if not download_success:
             from app.youtubedl import download_from_youtube_search
             download_success = download_from_youtube_search(query, output_file, ext, config)
+            if download_success and queue:
+                queue.add_task_source("youtube")
             
         # 3. Raise error if both failed
         if not download_success:
@@ -211,9 +217,11 @@ def download_track(track_id: int, config, queue=None):
     filename = _song_filename(song)
     out = os.path.join(config["download_dirs"]["songs"], filename)
     if not os.path.exists(out):
-        download_song_with_fallback(song, out, config)
+        download_song_with_fallback(song, out, config, queue=queue)
     else:
         print(f"Skipping (exists): {out}")
+        if queue:
+            queue.add_task_source("deezer")
     return out
 
 
@@ -278,7 +286,10 @@ def download_album(album_id: int, config, queue=None):
                 # Force album artist in metadata
                 song_copy = dict(song)
                 song_copy["ART_NAME"] = album_artist
-                download_song_with_fallback(song_copy, out, config)
+                download_song_with_fallback(song_copy, out, config, queue=queue)
+            else:
+                if queue:
+                    queue.add_task_source("deezer")
             downloaded.append(out)
         except Exception as e:
             print(f"Warning: {e}")
@@ -307,7 +318,10 @@ def download_playlist(playlist_id: str, config, queue=None):
             filename = _song_filename(song)
             out = os.path.join(playlist_dir, filename)
             if not os.path.exists(out):
-                download_song_with_fallback(song, out, config)
+                download_song_with_fallback(song, out, config, queue=queue)
+            else:
+                if queue:
+                    queue.add_task_source("deezer")
             downloaded.append(out)
         except Exception as e:
             print(f"Warning: {e}")
@@ -355,7 +369,10 @@ def download_spotify_playlist(playlist_name: str, playlist_url: str, config, que
             filename = _song_filename(song)
             out = os.path.join(playlist_dir, filename)
             if not os.path.exists(out):
-                download_song_with_fallback(song, out, config)
+                download_song_with_fallback(song, out, config, queue=queue)
+            else:
+                if queue:
+                    queue.add_task_source("deezer")
             downloaded.append(out)
         except Exception as e:
             print(f"Warning ({song_query}): {e}")
@@ -388,7 +405,10 @@ def download_favorites(user_id: str, config, queue=None):
             filename = _song_filename(song)
             out = os.path.join(fav_dir, filename)
             if not os.path.exists(out):
-                download_song_with_fallback(song, out, config)
+                download_song_with_fallback(song, out, config, queue=queue)
+            else:
+                if queue:
+                    queue.add_task_source("deezer")
             downloaded.append(out)
         except Exception as e:
             print(f"Warning: {e}")
@@ -397,6 +417,8 @@ def download_favorites(user_id: str, config, queue=None):
 
 def download_youtube(url: str, config, queue=None):
     """Download audio from a URL via yt-dlp."""
+    if queue:
+        queue.add_task_source("youtube")
     from app.youtubedl import resolve_ytdlp_cmd
     ytdlp_cmd = resolve_ytdlp_cmd(config.get("youtubedl", "command", fallback="yt-dlp"))
     proxy = config.get("proxy", "server", fallback="").strip() or None

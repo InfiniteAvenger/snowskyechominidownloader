@@ -95,6 +95,33 @@ def _get_user_data():
     return opts["license_token"], opts["web_sound_quality"]
 
 
+def check_arl_health() -> dict:
+    """Check the health and validity of the Deezer session / ARL cookie."""
+    if not session:
+        return {"status": "error", "message": "No Deezer session initialized (missing or empty ARL cookie)"}
+    try:
+        r = session.get("https://www.deezer.com/ajax/gw-light.php?method=deezer.getUserData&input=3&api_version=1.0&api_token=", timeout=5)
+        r.raise_for_status()
+        res = r.json()
+        if "results" in res and "USER" in res["results"]:
+            user_data = res["results"]["USER"]
+            user_id = user_data.get("USER_ID", 0)
+            if user_id > 0:
+                blog_name = user_data.get("BLOG_NAME", "User")
+                is_premium = user_data.get("OPTIONS", {}).get("license_token") is not None
+                return {
+                    "status": "ok",
+                    "user_id": user_id,
+                    "username": blog_name,
+                    "premium": is_premium
+                }
+            else:
+                return {"status": "invalid", "message": "ARL cookie expired or invalid (anonymous guest session)"}
+        return {"status": "error", "message": f"Unexpected response structure from Deezer: {res}"}
+    except Exception as e:
+        return {"status": "error", "message": f"Could not connect to Deezer API: {e}"}
+
+
 def _set_song_quality(quality_config: str, web_sound_quality: dict):
     global sound_format
     flac_ok = web_sound_quality.get("lossless") is True
@@ -194,20 +221,41 @@ def _search_albums(encoded_query: str) -> list:
     artist_ids = set()
     artist_names = {}
 
+    from concurrent.futures import ThreadPoolExecutor
+
+    def fetch_artists():
+        try:
+            ar = session.get(f"https://api.deezer.com/search/artist?q={encoded_query}&limit=3")
+            ar.raise_for_status()
+            return ar.json().get("data", [])
+        except Exception as err:
+            print(f"Artist search error: {err}")
+            return []
+
+    def fetch_tracks():
+        try:
+            tr = session.get(f"https://api.deezer.com/search/track?q={encoded_query}&limit=30")
+            tr.raise_for_status()
+            return tr.json().get("data", [])
+        except Exception as err:
+            print(f"Track search error: {err}")
+            return []
+
     try:
-        # Artist search
-        ar = session.get(f"https://api.deezer.com/search/artist?q={encoded_query}&limit=3")
-        ar.raise_for_status()
-        for a in ar.json().get("data", []):
+        # Run artist search and track search concurrently
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            fut_artists = executor.submit(fetch_artists)
+            fut_tracks = executor.submit(fetch_tracks)
+            artists_data = fut_artists.result()
+            tracks_data = fut_tracks.result()
+
+        for a in artists_data:
             artist_ids.add(a["id"])
             artist_names[a["id"]] = a["name"]
 
-        # Track search to find dominant artist
         from collections import Counter
-        tr = session.get(f"https://api.deezer.com/search/track?q={encoded_query}&limit=30")
-        tr.raise_for_status()
         counts = Counter()
-        for t in tr.json().get("data", []):
+        for t in tracks_data:
             counts[t["artist"]["id"]] += 1
             artist_names[t["artist"]["id"]] = t["artist"]["name"]
         if counts:
@@ -217,17 +265,24 @@ def _search_albums(encoded_query: str) -> list:
                 if n >= threshold and aid not in artist_ids:
                     artist_ids.add(aid)
 
-        # Fetch discographies
-        for aid in artist_ids:
-            albums = _get_artist_albums(aid)
-            for album in albums:
-                if album["id"] not in seen:
-                    if "artist" not in album:
-                        album["artist"] = {"name": artist_names.get(aid, ""), "id": aid}
-                    elif not album["artist"].get("name"):
-                        album["artist"]["name"] = artist_names.get(aid, "")
-                    data.append(album)
-                    seen.add(album["id"])
+        # Fetch discographies in parallel
+        if artist_ids:
+            with ThreadPoolExecutor(max_workers=len(artist_ids)) as executor:
+                future_to_aid = {executor.submit(_get_artist_albums, aid): aid for aid in artist_ids}
+                for future in future_to_aid:
+                    aid = future_to_aid[future]
+                    try:
+                        albums = future.result()
+                        for album in albums:
+                            if album["id"] not in seen:
+                                if "artist" not in album:
+                                    album["artist"] = {"name": artist_names.get(aid, ""), "id": aid}
+                                elif not album["artist"].get("name"):
+                                    album["artist"]["name"] = artist_names.get(aid, "")
+                                data.append(album)
+                                seen.add(album["id"])
+                    except Exception as disc_err:
+                        print(f"Could not fetch albums for artist {aid}: {disc_err}")
     except Exception as e:
         print(f"Could not supplement album search: {e}")
 
@@ -249,10 +304,51 @@ def _get_artist_albums(artist_id) -> list:
     return albums
 
 
+def _fetch_album_year(album_id):
+    try:
+        r = session.get(f"https://api.deezer.com/album/{album_id}", timeout=3)
+        if r.ok:
+            data = r.json()
+            return str(album_id), data.get("release_date") or ""
+    except Exception:
+        pass
+    return str(album_id), ""
+
+
 def _format_results(data, search_type) -> list:
     results = []
     if not data:
         return results
+
+    # Collect unique album IDs where release date is needed
+    album_ids = set()
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        if search_type == TYPE_ALBUM:
+            if not item.get("release_date"):
+                album_ids.add(item.get("id"))
+        elif search_type == TYPE_TRACK:
+            album_dict = item.get("album") or {}
+            aid = album_dict.get("id") if isinstance(album_dict, dict) else None
+            if aid:
+                album_ids.add(aid)
+
+    # Fetch album release years in parallel
+    album_years = {}
+    if album_ids:
+        from concurrent.futures import ThreadPoolExecutor
+        # Limit parallel queries to avoid rate limits
+        with ThreadPoolExecutor(max_workers=min(20, len(album_ids))) as executor:
+            futures = [executor.submit(_fetch_album_year, aid) for aid in album_ids if aid]
+            for fut in futures:
+                try:
+                    aid, rel_date = fut.result()
+                    if rel_date:
+                        album_years[str(aid)] = rel_date[:4]
+                except Exception:
+                    pass
+
     for item in data:
         if not isinstance(item, dict):
             continue
@@ -260,8 +356,10 @@ def _format_results(data, search_type) -> list:
         if search_type == TYPE_ALBUM:
             artist_dict = item.get("artist") or {}
             artist_name = artist_dict.get("name", "Unknown Artist") if isinstance(artist_dict, dict) else "Unknown Artist"
+            aid = str(item.get("id", ""))
+            year = item.get("release_date", "")[:4] if item.get("release_date") else album_years.get(aid, "")
             r = {
-                "id": str(item.get("id", "")),
+                "id": aid,
                 "id_type": TYPE_ALBUM,
                 "album": item.get("title", "Unknown Album"),
                 "album_id": item.get("id", ""),
@@ -269,6 +367,7 @@ def _format_results(data, search_type) -> list:
                 "artist": artist_name,
                 "title": "",
                 "preview_url": "",
+                "year": year,
             }
         elif search_type == TYPE_TRACK:
             album_dict = item.get("album") or {}
@@ -279,6 +378,7 @@ def _format_results(data, search_type) -> list:
             artist_dict = item.get("artist") or {}
             artist_name = artist_dict.get("name", "Unknown Artist") if isinstance(artist_dict, dict) else "Unknown Artist"
             
+            year = album_years.get(str(album_id), "")
             r = {
                 "id": str(item.get("id", "")),
                 "id_type": TYPE_TRACK,
@@ -288,10 +388,14 @@ def _format_results(data, search_type) -> list:
                 "album_id": album_id,
                 "artist": artist_name,
                 "preview_url": item.get("preview", ""),
+                "year": year,
             }
         elif search_type == TYPE_ALBUM_TRACK:
             pic_id = item.get("ALB_PICTURE")
             img_url = f"https://e-cdns-images.dzcdn.net/images/cover/{pic_id}/250x250.jpg" if pic_id else ""
+            
+            rel_date = item.get("PHYSICAL_RELEASE_DATE") or item.get("ORIGINAL_RELEASE_DATE") or ""
+            year = rel_date[:4] if rel_date else ""
             
             r = {
                 "id": str(item.get("SNG_ID", "")),
@@ -302,6 +406,7 @@ def _format_results(data, search_type) -> list:
                 "album_id": item.get("ALB_ID", ""),
                 "artist": item.get("ART_NAME", "Unknown Artist"),
                 "preview_url": next((m.get("HREF", "") for m in item.get("MEDIA", []) if isinstance(m, dict) and m.get("TYPE") == "preview"), ""),
+                "year": year,
             }
         results.append(r)
     return results
